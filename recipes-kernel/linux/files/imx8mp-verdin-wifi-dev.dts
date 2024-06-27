@@ -1,0 +1,40 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/*
+ * Copyright 2022 Toradex
+ */
+
+/dts-v1/;
+
+#include "imx8mp-verdin.dtsi"
+#include "imx8mp-verdin-wifi.dtsi"
+#include "imx8mp-verdin-dev.dtsi"
+
+/ {
+	model = "Toradex Verdin iMX8M Plus WB on Verdin Development Board (TPM)";
+	compatible = "toradex,verdin-imx8mp-wifi-dev",
+		     "toradex,verdin-imx8mp-wifi",
+		     "toradex,verdin-imx8mp",
+		     "fsl,imx8mp";
+};
+
+&ecspi1 {
+        pinctrl-0 = <&pinctrl_ecspi1>;
+        cs-gpios = <&gpio5 9 GPIO_ACTIVE_LOW>;
+        status = "okay";
+
+        tpm@0 {
+                compatible = "infineon,slb9670", "tcg,tpm_tis-spi";
+                spi-max-frequency = <32000000>;
+                reg = <0>;
+        };
+};
+
+&iomuxc {
+        pinctrl_ecspi1: ecspi1grp {
+                fsl,pins =
+                        <MX8MP_IOMUXC_ECSPI1_MISO__ECSPI1_MISO 0x1c4>,
+                        <MX8MP_IOMUXC_ECSPI1_MOSI__ECSPI1_MOSI 0x4>,
+                        <MX8MP_IOMUXC_ECSPI1_SCLK__ECSPI1_SCLK 0x4>,
+                        <MX8MP_IOMUXC_ECSPI1_SS0__GPIO5_IO09 0x82>;
+        };
+};

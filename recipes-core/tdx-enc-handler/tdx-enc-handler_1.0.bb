@@ -6,6 +6,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 SRC_URI = "\
     file://tdx-enc-cleartext.sh \
     file://tdx-enc-caam.sh \
+    file://tdx-enc-tpm.sh \
     file://tdx-enc-handler.service \
 "
 
@@ -21,9 +22,18 @@ RDEPENDS_CAAM = "\
 "
 RDEPENDS:${PN}:append = "${@ '${RDEPENDS_CAAM}' if d.getVar('TDX_ENC_KEY_BACKEND') == 'caam' else ''}"
 
+RDEPENDS_TPM = "\
+    keyutils \
+    tpm2-tools \
+    strace \
+    util-linux \
+"
+RDEPENDS:${PN}:append = "${@ '${RDEPENDS_TPM}' if d.getVar('TDX_ENC_KEY_BACKEND') == 'tpm' else ''}"
+
 inherit systemd
 
 SYSTEMD_SERVICE:${PN} = "tdx-enc-handler.service"
+SYSTEMD_AUTO_ENABLE = "disable"
 
 do_install() {
     install -d ${D}${sbindir}
