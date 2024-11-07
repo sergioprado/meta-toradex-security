@@ -15,4 +15,5 @@ OPTEE_OS_DEBUG_OPTS = "\
 EXTRA_OEMAKE:append:pn-optee-os = "\
     ${@oe.utils.conditional('TDX_OPTEE_DEBUG', '1', '${OPTEE_OS_DEBUG_OPTS}', '', d)} \
     CFG_UART_BASE=${UART_BASE_ADDR} \
+    ${OPTEE_OS_EXTRA_MACHINE_ARGS} \
 "
