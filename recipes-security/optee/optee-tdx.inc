@@ -7,6 +7,8 @@ require include/optee-tdx-${MACHINE}.inc
 OPTEE_OS_DEBUG_OPTS = "\
     CFG_TEE_CORE_LOG_LEVEL=3 \
     CFG_TEE_TA_LOG_LEVEL=3 \
+    CFG_TEE_CORE_TA_TRACE=y \
+    CFG_TEE_CORE_DEBUG=y \
 "
 
 # additional build flags for optee-os
