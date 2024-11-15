@@ -4,6 +4,12 @@ TDX_OPTEE_ENABLE = "1"
 # disable OP-TEE on R5 firmware for K3 based platforms
 TDX_OPTEE_ENABLE:verdin-am62-k3r5 = "0"
 
+# extension to append to optee binary when using the NXP recipes for ARM32 platforms
+OPTEE_BIN_EXT = "bin"
+
+# include machine-dependent OP-TEE configuration (if available)
+include tdx-optee-${MACHINE}.inc
+
 # required by some vendor BSPs
 MACHINE_FEATURES:append = " optee"
 
@@ -43,6 +49,7 @@ python validate_optee_support() {
         'verdin-imx8mp',
         'verdin-imx8mm',
         'verdin-am62',
+        'colibri-imx6',
     ]
 
     if e.data.getVar('TDX_OPTEE_ENABLE') == '0':

@@ -1,0 +1,52 @@
+
+#include <config.h>
+
+/ {
+	binman {
+		fit {
+			description = "FIT image with OP-TEE";
+			fit,fdt-list = "of-list";
+			#address-cells = <1>;
+			filename = "u-boot.itb";
+			images {
+				u-boot {
+					description = "U-Boot";
+					type = "standalone";
+					os = "U-Boot";
+					arch = "arm";
+					compression = "none";
+					load = <CONFIG_TEXT_BASE>;
+					entry = <CONFIG_TEXT_BASE>;
+					u-boot-nodtb {
+					};
+				};
+				op-tee {
+					description = "OP-TEE";
+					type = "tee";
+					arch = "arm";
+					os = "tee";
+					compression = "none";
+					load = <(CFG_SYS_SDRAM_BASE + 0x0e000000)>;
+					entry = <(CFG_SYS_SDRAM_BASE + 0x0e000000)>;
+					tee-os {
+					};
+				};
+				@fdt-SEQ {
+					description = "fdt-NAME";
+					compression = "none";
+					type = "flat_dt";
+					arch = "arm";
+				};
+			};
+			configurations {
+				default = "@config-DEFAULT-SEQ";
+				@config-SEQ {
+					description = "NAME.dtb";
+					fdt = "fdt-SEQ";
+					fit,firmware = "op-tee", "u-boot";
+					fit,loadables;
+				};
+			};
+		};
+	};
+};

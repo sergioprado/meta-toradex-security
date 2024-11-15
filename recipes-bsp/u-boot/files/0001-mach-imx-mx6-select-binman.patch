@@ -1,0 +1,25 @@
+From 756ad1f3fb562b3791a0f2fdbb7af10a2a0bc3e0 Mon Sep 17 00:00:00 2001
+From: Sergio Prado <sergio.prado@e-labworks.com>
+Date: Tue, 12 Nov 2024 17:48:03 -0300
+Subject: [PATCH] mach-imx: mx6: select binman
+
+Signed-off-by: Sergio Prado <sergio.prado@e-labworks.com>
+---
+ arch/arm/mach-imx/mx6/Kconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/mach-imx/mx6/Kconfig b/arch/arm/mach-imx/mx6/Kconfig
+index 15ee2b933f69..bd8b23f642cc 100644
+--- a/arch/arm/mach-imx/mx6/Kconfig
++++ b/arch/arm/mach-imx/mx6/Kconfig
+@@ -160,6 +160,7 @@ config TARGET_COLIBRI_IMX6
+ 	select DM_SERIAL
+ 	select DM_THERMAL
+ 	select SUPPORT_SPL
++	select BINMAN if SPL_OPTEE_IMAGE
+ 	imply CMD_DM
+ 
+ config TARGET_COLIBRI_IMX6ULL
+-- 
+2.34.1
+
