@@ -1,0 +1,108 @@
+From 2ffd211121bff2b873e2d0f4dc076a7c63b7afe3 Mon Sep 17 00:00:00 2001
+From: Sergio Prado <sergio.prado@e-labworks.com>
+Date: Thu, 28 Nov 2024 16:47:49 -0300
+Subject: [PATCH] toradex: imx6dl: add support to boot OP-TEE from SPL
+
+Upstream-Status: Pending
+
+Signed-off-by: Sergio Prado <sergio.prado@e-labworks.com>
+---
+ .../dts/imx6dl-colibri-eval-v3-u-boot.dtsi    | 62 +++++++++++++++++++
+ arch/arm/mach-imx/mx6/Kconfig                 |  1 +
+ 2 files changed, 63 insertions(+)
+
+diff --git a/arch/arm/dts/imx6dl-colibri-eval-v3-u-boot.dtsi b/arch/arm/dts/imx6dl-colibri-eval-v3-u-boot.dtsi
+index 44baaa803243..7535e3012384 100644
+--- a/arch/arm/dts/imx6dl-colibri-eval-v3-u-boot.dtsi
++++ b/arch/arm/dts/imx6dl-colibri-eval-v3-u-boot.dtsi
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "imx6qdl-u-boot.dtsi"
++#include <config.h>
+ 
+ / {
+ 	aliases {
+@@ -26,6 +27,67 @@
+ 		wdt = <&wdog1>;
+ 		bootph-pre-ram;
+ 	};
++
++#if defined(CONFIG_SPL_OPTEE_IMAGE)
++	reserved-memory {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges;
++
++		optee@1c000000 {
++			reg = <0x1c000000 0x01000000>;
++			no-map;
++		};
++	};
++
++	binman {
++		fit {
++			description = "FIT image with OP-TEE";
++			fit,fdt-list = "of-list";
++			#address-cells = <1>;
++			filename = "u-boot.itb";
++			images {
++				u-boot {
++					description = "U-Boot";
++					type = "standalone";
++					os = "U-Boot";
++					arch = "arm";
++					compression = "none";
++					load = <CONFIG_TEXT_BASE>;
++					entry = <CONFIG_TEXT_BASE>;
++					u-boot-nodtb {
++					};
++				};
++				op-tee {
++					description = "OP-TEE";
++					type = "tee";
++					arch = "arm";
++					os = "tee";
++					compression = "none";
++					load = <0x1c000000>;
++					entry = <0x1c000000>;
++					tee-os {
++					};
++				};
++				@fdt-SEQ {
++					description = "fdt-NAME";
++					compression = "none";
++					type = "flat_dt";
++					arch = "arm";
++				};
++			};
++			configurations {
++				default = "@config-DEFAULT-SEQ";
++				@config-SEQ {
++					description = "NAME.dtb";
++					fdt = "fdt-SEQ";
++					fit,firmware = "op-tee", "u-boot";
++					fit,loadables;
++				};
++			};
++		};
++	};
++#endif
+ };
+ 
+ &wdog1 {
+diff --git a/arch/arm/mach-imx/mx6/Kconfig b/arch/arm/mach-imx/mx6/Kconfig
+index 15ee2b933f69..bd8b23f642cc 100644
+--- a/arch/arm/mach-imx/mx6/Kconfig
++++ b/arch/arm/mach-imx/mx6/Kconfig
+@@ -160,6 +160,7 @@ config TARGET_COLIBRI_IMX6
+ 	select DM_SERIAL
+ 	select DM_THERMAL
+ 	select SUPPORT_SPL
++	select BINMAN if SPL_OPTEE_IMAGE
+ 	imply CMD_DM
+ 
+ config TARGET_COLIBRI_IMX6ULL
+-- 
+2.34.1
+
