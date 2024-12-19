@@ -47,6 +47,7 @@ validate_optee_support[eventmask] = "bb.event.SanityCheck"
 python validate_optee_support() {
     supported_machines = [
         'colibri-imx6',
+        'colibri-imx7-emmc',
         'verdin-imx8mp',
         'verdin-imx8mm',
         'verdin-am62',

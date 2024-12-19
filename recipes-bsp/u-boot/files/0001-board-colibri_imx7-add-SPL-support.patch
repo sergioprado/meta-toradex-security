@@ -1,0 +1,511 @@
+From a759f13f4eddef64d9ccbe9544f6f762903a6a1b Mon Sep 17 00:00:00 2001
+From: Sergio Prado <sergio.prado@e-labworks.com>
+Date: Tue, 10 Dec 2024 06:00:40 -0300
+Subject: [PATCH] board: colibri_imx7: add SPL support
+
+Upstream-Status: Pending
+
+Signed-off-by: Sergio Prado <sergio.prado@e-labworks.com>
+---
+ arch/arm/mach-imx/mx7/Kconfig             |   1 +
+ board/toradex/colibri_imx7/Kconfig        |   3 -
+ board/toradex/colibri_imx7/Makefile       |   2 +-
+ board/toradex/colibri_imx7/colibri_imx7.c |   4 +-
+ board/toradex/colibri_imx7/imximage.cfg   | 148 ----------------------
+ board/toradex/colibri_imx7/spl.c          | 148 ++++++++++++++++++++++
+ configs/colibri_imx7_defconfig            |  11 +-
+ configs/colibri_imx7_emmc_defconfig       |   7 +-
+ drivers/serial/serial_mxc.c               |   8 +-
+ include/configs/colibri_imx7.h            |   3 +
+ 10 files changed, 177 insertions(+), 158 deletions(-)
+ delete mode 100644 board/toradex/colibri_imx7/imximage.cfg
+ create mode 100644 board/toradex/colibri_imx7/spl.c
+
+diff --git a/arch/arm/mach-imx/mx7/Kconfig b/arch/arm/mach-imx/mx7/Kconfig
+index 3c0208e13dda..9220335022b9 100644
+--- a/arch/arm/mach-imx/mx7/Kconfig
++++ b/arch/arm/mach-imx/mx7/Kconfig
+@@ -94,6 +94,7 @@ config TARGET_COLIBRI_IMX7
+ 	select DM_SERIAL
+ 	select DM_THERMAL
+ 	select MX7D
++	select SUPPORT_SPL
+ 	imply CMD_DM
+ 
+ endchoice
+diff --git a/board/toradex/colibri_imx7/Kconfig b/board/toradex/colibri_imx7/Kconfig
+index 87c416ac2fac..d33ec635238e 100644
+--- a/board/toradex/colibri_imx7/Kconfig
++++ b/board/toradex/colibri_imx7/Kconfig
+@@ -71,9 +71,6 @@ config TDX_CFG_BLOCK_OFFSET
+ 
+ endif
+ 
+-config IMX_CONFIG
+-	default "board/toradex/colibri_imx7/imximage.cfg"
+-
+ source "board/toradex/common/Kconfig"
+ 
+ endif
+diff --git a/board/toradex/colibri_imx7/Makefile b/board/toradex/colibri_imx7/Makefile
+index b212ff0f26fb..b987316cc96d 100644
+--- a/board/toradex/colibri_imx7/Makefile
++++ b/board/toradex/colibri_imx7/Makefile
+@@ -1,4 +1,4 @@
+ # SPDX-License-Identifier: GPL-2.0+
+ # Copyright (C) 2016 Toradex AG
+ 
+-obj-y  := colibri_imx7.o
++obj-y  := colibri_imx7.o spl.o
+diff --git a/board/toradex/colibri_imx7/colibri_imx7.c b/board/toradex/colibri_imx7/colibri_imx7.c
+index c37c5e0af6d9..fd5bfba152c1 100644
+--- a/board/toradex/colibri_imx7/colibri_imx7.c
++++ b/board/toradex/colibri_imx7/colibri_imx7.c
+@@ -100,7 +100,7 @@ static iomux_v3_cfg_t const gpmi_pads[] = {
+ 	MX7D_PAD_SAI1_TX_DATA__NAND_READY_B	| MUX_PAD_CTRL(NAND_PAD_READY0_CTRL),
+ };
+ 
+-static void setup_gpmi_nand(void)
++void setup_gpmi_nand(void)
+ {
+ 	imx_iomux_v3_setup_multiple_pads(gpmi_pads, ARRAY_SIZE(gpmi_pads));
+ 
+@@ -217,7 +217,7 @@ int board_init(void)
+ 	return 0;
+ }
+ 
+-#ifdef CONFIG_DM_PMIC
++#if (defined(CONFIG_DM_PMIC) && !defined(CONFIG_SPL_BUILD))
+ int power_init_board(void)
+ {
+ 	struct udevice *dev;
+diff --git a/board/toradex/colibri_imx7/imximage.cfg b/board/toradex/colibri_imx7/imximage.cfg
+deleted file mode 100644
+index 41b3577b10dc..000000000000
+--- a/board/toradex/colibri_imx7/imximage.cfg
++++ /dev/null
+@@ -1,148 +0,0 @@
+-/* SPDX-License-Identifier: GPL-2.0+ */
+-/*
+- * Copyright (C) 2015 Freescale Semiconductor, Inc.
+- *               2015 Toradex AG
+- *
+- * Refer doc/imx/mkimage/imximage.txt for more details about how-to configure
+- * and create imximage boot image
+- *
+- * The syntax is taken as close as possible with the kwbimage
+- */
+-
+-#include <config.h>
+-
+-/* image version */
+-
+-IMAGE_VERSION 2
+-
+-/*
+- * Boot Device : sd
+- */
+-
+-BOOT_FROM	sd
+-
+-/*
+- * Secure boot support
+- */
+-#ifdef CONFIG_IMX_HAB
+-CSF CONFIG_CSF_SIZE
+-#endif
+-
+-/*
+- * Device Configuration Data (DCD)
+- *
+- * Each entry must have the format:
+- * Addr-type           Address        Value
+- *
+- * where:
+- *	Addr-type register length (1,2 or 4 bytes)
+- *	Address	  absolute address of the register
+- *	value	  value to be stored in the register
+- */
+-
+-/* IOMUXC_GPR_GPR1 */
+-DATA 4 0x30340004 0x4F400005
+-
+-/* DDR3L */
+-/* assuming MEMC_FREQ_RATIO = 2 */
+-/* SRC_DDRC_RCR */
+-DATA 4 0x30391000 0x00000002
+-/* DDRC_MSTR */
+-DATA 4 0x307a0000 0x01040001
+-/* DDRC_DFIUPD0 */
+-DATA 4 0x307a01a0 0x80400003
+-/* DDRC_DFIUPD1 */
+-DATA 4 0x307a01a4 0x00100020
+-/* DDRC_DFIUPD2 */
+-DATA 4 0x307a01a8 0x80100004
+-/* DDRC_RFSHTMG */
+-DATA 4 0x307a0064 0x00400046
+-/* DDRC_MP_PCTRL_0 */
+-DATA 4 0x307a0490 0x00000001
+-/* DDRC_INIT0 */
+-DATA 4 0x307a00d0 0x00020083
+-/* DDRC_INIT1 */
+-DATA 4 0x307a00d4 0x00690000
+-/* DDRC_INIT3 MR0/MR1 */
+-DATA 4 0x307a00dc 0x09300004
+-/* DDRC_INIT4 MR2/MR3 */
+-DATA 4 0x307a00e0 0x04480000
+-/* DDRC_INIT5 */
+-DATA 4 0x307a00e4 0x00100004
+-/* DDRC_RANKCTL */
+-DATA 4 0x307a00f4 0x0000033f
+-/* DDRC_DRAMTMG0 */
+-DATA 4 0x307a0100 0x0910090a
+-/* DDRC_DRAMTMG1 */
+-DATA 4 0x307a0104 0x000d020e
+-/* DDRC_DRAMTMG2 */
+-DATA 4 0x307a0108 0x03040307
+-/* DDRC_DRAMTMG3 */
+-DATA 4 0x307a010c 0x00002006
+-/* DDRC_DRAMTMG4 */
+-DATA 4 0x307a0110 0x04020204
+-/* DDRC_DRAMTMG5 */
+-DATA 4 0x307a0114 0x03030202
+-/* DDRC_DRAMTMG8 */
+-DATA 4 0x307a0120 0x00000803
+-/* DDRC_ZQCTL0 */
+-DATA 4 0x307a0180 0x00800020
+-/* DDRC_ZQCTL1 */
+-DATA 4 0x307a0184 0x02001000
+-/* DDRC_DFITMG0 */
+-DATA 4 0x307a0190 0x02098204
+-/* DDRC_DFITMG1 */
+-DATA 4 0x307a0194 0x00030303
+-/* DDRC_ADDRMAP0 */
+-DATA 4 0x307a0200 0x0000001f
+-/* DDRC_ADDRMAP1 */
+-DATA 4 0x307a0204 0x00080808
+-/* DDRC_ADDRMAP5 */
+-DATA 4 0x307a0214 0x07070707
+-/* DDRC_ADDRMAP6 */
+-DATA 4 0x307a0218 0x07070707
+-/* DDRC_ODTCFG */
+-DATA 4 0x307a0240 0x06000601
+-/* DDRC_ODTMAP */
+-DATA 4 0x307a0244 0x00000001
+-/* SRC_DDRC_RCR */
+-DATA 4 0x30391000 0x00000000
+-/* DDR_PHY_PHY_CON0 */
+-DATA 4 0x30790000 0x17420f40
+-/* DDR_PHY_PHY_CON1 */
+-DATA 4 0x30790004 0x10210100
+-/* DDR_PHY_PHY_CON4 */
+-DATA 4 0x30790010 0x00060807
+-/* DDR_PHY_MDLL_CON0 */
+-DATA 4 0x307900b0 0x1010007e
+-/* DDR_PHY_DRVDS_CON0 */
+-DATA 4 0x3079009c 0x00000d6e
+-/* DDR_PHY_OFFSET_RD_CON0 */
+-DATA 4 0x30790020 0x08080808
+-/* DDR_PHY_OFFSET_WR_CON0 */
+-DATA 4 0x30790030 0x08080808
+-/* DDR_PHY_CMD_SDLL_CON0 */
+-DATA 4 0x30790050 0x01000010
+-DATA 4 0x30790050 0x00000010
+-
+-/* DDR_PHY_ZQ_CON0 */
+-DATA 4 0x307900c0 0x0e407304
+-DATA 4 0x307900c0 0x0e447304
+-DATA 4 0x307900c0 0x0e447306
+-/* DDR_PHY_ZQ_CON1 */
+-CHECK_BITS_SET 4 0x307900c4 0x1
+-/* DDR_PHY_ZQ_CON0 */
+-DATA 4 0x307900c0 0x0e447304
+-DATA 4 0x307900c0 0x0e407304
+-
+-/* CCM_CCGRn */
+-DATA 4 0x30384130 0x00000000
+-/* IOMUXC_GPR_GPR8 */
+-DATA 4 0x30340020 0x00000178
+-/* CCM_CCGRn */
+-DATA 4 0x30384130 0x00000002
+-/* DDR_PHY_LP_CON0 */
+-DATA 4 0x30790018 0x0000000f
+-
+-/* DDRC_STAT */
+-CHECK_BITS_SET 4 0x307a0004 0x1
+diff --git a/board/toradex/colibri_imx7/spl.c b/board/toradex/colibri_imx7/spl.c
+new file mode 100644
+index 000000000000..19eb4a7a9740
+--- /dev/null
++++ b/board/toradex/colibri_imx7/spl.c
+@@ -0,0 +1,148 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * Copyright (C) 2024 Embedded Labworks
++ *
++ * Author: Sergio Prado <sergio.prado@e-labworks.com>
++ */
++
++#include <spl.h>
++#include <init.h>
++#include <fsl_esdhc_imx.h>
++#include <asm/io.h>
++#include <asm/sections.h>
++#include <asm/arch-mx7/clock.h>
++#include <asm/arch/mx7-pins.h>
++#include <asm/arch-mx7/mx7-ddr.h>
++
++#if defined(CONFIG_SPL_BUILD)
++
++static struct ddrc ddrc_regs_val = {
++	.mstr		= 0x01040001,
++	.init1		= 0x00690000,
++	.init0		= 0x00020083,
++	.init3		= 0x09300004,
++	.init4		= 0x04480000,
++	.init5		= 0x00100004,
++	.rankctl	= 0x0000033f,
++	.dramtmg0	= 0x0910090a,
++	.dramtmg1	= 0x000d020e,
++	.dramtmg2	= 0x03040307,
++	.dramtmg3	= 0x00002006,
++	.dramtmg4	= 0x04020204,
++	.dramtmg5	= 0x03030202,
++	.dramtmg8	= 0x00000803,
++	.zqctl0		= 0x00800020,
++	.zqctl1		= 0x02001000,
++	.dfitmg0	= 0x02098204,
++	.dfitmg1	= 0x00030303,
++	.dfiupd0	= 0x80400003,
++	.dfiupd1	= 0x00100020,
++	.dfiupd2	= 0x80100004,
++	.odtcfg		= 0x06000601,
++	.odtmap		= 0x00000001,
++	.rfshtmg	= 0x00400046,
++	.addrmap0	= 0x0000001f,
++	.addrmap1	= 0x00080808,
++	.addrmap5	= 0x07070707,
++	.addrmap6	= 0x07070707,
++};
++
++static struct ddrc_mp ddrc_mp_val = {
++	.pctrl_0	= 0x00000001,
++};
++
++static struct ddr_phy ddr_phy_regs_val = {
++	.phy_con0	= 0x17420f40,
++	.phy_con1	= 0x10210100,
++	.phy_con4	= 0x00060807,
++	.mdll_con0	= 0x1010007e,
++	.drvds_con0	= 0x00000d6e,
++	.cmd_sdll_con0	= 0x00000010,
++	.offset_lp_con0	= 0x0000000f,
++	.offset_rd_con0	= 0x08080808,
++	.offset_wr_con0	= 0x08080808,
++};
++
++static struct mx7_calibration calib_param = {
++	.num_val	= 5,
++	.values		= {
++		0x0e407304,
++		0x0e447304,
++		0x0e447306,
++		0x0e447304,
++		0x0e407304,
++	},
++};
++
++static void ddr_init(void)
++{
++	mx7_dram_cfg(&ddrc_regs_val, &ddrc_mp_val, &ddr_phy_regs_val,
++		&calib_param);
++}
++
++static void gpr_init(void)
++{
++	struct iomuxc_gpr_base_regs *gpr_regs =
++		(struct iomuxc_gpr_base_regs *)IOMUXC_GPR_BASE_ADDR;
++
++	writel(0x4F400005, &gpr_regs->gpr[1]);
++	writel(0x00000178, &gpr_regs->gpr[8]);
++}
++
++void board_init_f(ulong dummy)
++{
++	arch_cpu_init();
++	gpr_init();
++	board_early_init_f();
++	timer_init();
++	preloader_console_init();
++	ddr_init();
++	memset(__bss_start, 0, __bss_end - __bss_start);
++#ifdef CONFIG_TARGET_COLIBRI_IMX7_NAND
++	setup_gpmi_nand();
++#endif
++	board_init_r(NULL, 0);
++}
++
++#define USDHC_PAD_CTRL	(PAD_CTL_DSE_3P3V_32OHM | PAD_CTL_SRE_SLOW | \
++				PAD_CTL_HYS | PAD_CTL_PUE | PAD_CTL_PUS_PU47KOHM)
++
++static iomux_v3_cfg_t const usdhc3_emmc_pads[] = {
++	MX7D_PAD_SD3_CLK__SD3_CLK | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_CMD__SD3_CMD | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA0__SD3_DATA0 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA1__SD3_DATA1 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA2__SD3_DATA2 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA3__SD3_DATA3 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA4__SD3_DATA4 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA5__SD3_DATA5 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA6__SD3_DATA6 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_DATA7__SD3_DATA7 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++	MX7D_PAD_SD3_STROBE__SD3_STROBE	 | MUX_PAD_CTRL(USDHC_PAD_CTRL),
++};
++
++int board_mmc_init(struct bd_info *bis)
++{
++	static struct fsl_esdhc_cfg usdhc_cfg;
++	int ret = 0;
++
++	imx_iomux_v3_setup_multiple_pads(usdhc3_emmc_pads,
++					 ARRAY_SIZE(usdhc3_emmc_pads));
++
++	usdhc_cfg.esdhc_base = USDHC3_BASE_ADDR;
++	usdhc_cfg.sdhc_clk = mxc_get_clock(MXC_ESDHC3_CLK);
++	usdhc_cfg.max_bus_width = 8;
++
++	ret = fsl_esdhc_initialize(bis, &usdhc_cfg);
++	if (ret)
++		log_err("Error: could not initialize MMC. (%d)\n", ret);
++
++	return ret;
++}
++
++int board_mmc_getcd(struct mmc *mmc)
++{
++	return 1; /* assume uSDHC3 emmc is always present */
++}
++
++#endif /* CONFIG_SPL_BUILD */
+diff --git a/configs/colibri_imx7_defconfig b/configs/colibri_imx7_defconfig
+index 47c2ffcc84e5..24a8131d05fe 100644
+--- a/configs/colibri_imx7_defconfig
++++ b/configs/colibri_imx7_defconfig
+@@ -1,6 +1,8 @@
+ CONFIG_ARM=y
+ CONFIG_ARCH_MX7=y
+ CONFIG_SYS_MALLOC_LEN=0x2000000
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
+ CONFIG_NR_DRAM_BANKS=1
+ CONFIG_ENV_SIZE=0x20000
+ CONFIG_ENV_OFFSET=0x380000
+@@ -8,9 +10,11 @@ CONFIG_DM_GPIO=y
+ CONFIG_DEFAULT_DEVICE_TREE="imx7d-colibri-eval-v3"
+ CONFIG_TARGET_COLIBRI_IMX7=y
+ CONFIG_OF_LIBFDT_OVERLAY=y
++CONFIG_SPL_SERIAL=y
++CONFIG_SPL_BSS_MAX_SIZE=0x100000
++CONFIG_SPL=y
+ CONFIG_IMX_RDC=y
+ CONFIG_IMX_BOOTAUX=y
+-CONFIG_IMX_HAB=y
+ CONFIG_SYS_LOAD_ADDR=0x84200000
+ CONFIG_OF_BOARD_FIXUP=y
+ CONFIG_SYS_MEMTEST_START=0x80000000
+@@ -28,6 +32,9 @@ CONFIG_SYS_CONSOLE_IS_IN_ENV=y
+ # CONFIG_DISPLAY_BOARDINFO is not set
+ CONFIG_DISPLAY_BOARDINFO_LATE=y
+ CONFIG_BOARD_LATE_INIT=y
++CONFIG_SPL_SYS_MALLOC=y
++CONFIG_SPL_DMA=y
++CONFIG_SPL_NAND_SUPPORT=y
+ CONFIG_SYS_PROMPT="Colibri iMX7 # "
+ CONFIG_SYS_MAXARGS=32
+ # CONFIG_BOOTM_PLAN9 is not set
+@@ -87,6 +94,8 @@ CONFIG_MTD_RAW_NAND=y
+ CONFIG_SYS_NAND_USE_FLASH_BBT=y
+ CONFIG_NAND_MXS_DT=y
+ CONFIG_SYS_NAND_ONFI_DETECTION=y
++CONFIG_SYS_NAND_U_BOOT_LOCATIONS=y
++CONFIG_SYS_NAND_U_BOOT_OFFS=0xC0000
+ CONFIG_MTD_UBI_FASTMAP=y
+ CONFIG_PHYLIB=y
+ CONFIG_PHY_MICREL=y
+diff --git a/configs/colibri_imx7_emmc_defconfig b/configs/colibri_imx7_emmc_defconfig
+index 001f2f92229f..b0b2d97ccf34 100644
+--- a/configs/colibri_imx7_emmc_defconfig
++++ b/configs/colibri_imx7_emmc_defconfig
+@@ -1,6 +1,8 @@
+ CONFIG_ARM=y
+ CONFIG_ARCH_MX7=y
+ CONFIG_SYS_MALLOC_LEN=0x2000000
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_SPL_LIBGENERIC_SUPPORT=y
+ CONFIG_ENV_SIZE=0x2000
+ CONFIG_ENV_OFFSET=0xFFFFDE00
+ CONFIG_DM_GPIO=y
+@@ -8,9 +10,12 @@ CONFIG_DEFAULT_DEVICE_TREE="imx7d-colibri-emmc-eval-v3"
+ CONFIG_TARGET_COLIBRI_IMX7=y
+ CONFIG_TARGET_COLIBRI_IMX7_EMMC=y
+ CONFIG_OF_LIBFDT_OVERLAY=y
++CONFIG_SPL_MMC=y
++CONFIG_SPL_SERIAL=y
++CONFIG_SPL_BSS_MAX_SIZE=0x100000
++CONFIG_SPL=y
+ CONFIG_IMX_RDC=y
+ CONFIG_IMX_BOOTAUX=y
+-CONFIG_IMX_HAB=y
+ CONFIG_SYS_LOAD_ADDR=0x84200000
+ CONFIG_SYS_MEMTEST_START=0x80000000
+ CONFIG_SYS_MEMTEST_END=0x8c000000
+diff --git a/drivers/serial/serial_mxc.c b/drivers/serial/serial_mxc.c
+index cc85a502726e..6ab876a9ab4f 100644
+--- a/drivers/serial/serial_mxc.c
++++ b/drivers/serial/serial_mxc.c
+@@ -215,6 +215,10 @@ static void _mxc_serial_setbrg(struct mxc_uart *base, unsigned long clk,
+ #error "define CFG_MXC_UART_BASE to use the MXC UART driver"
+ #endif
+ 
++#ifndef CFG_MXC_UART_USE_DTE
++#define CFG_MXC_UART_USE_DTE false
++#endif
++
+ #define mxc_base	((struct mxc_uart *)CFG_MXC_UART_BASE)
+ 
+ static void mxc_serial_setbrg(void)
+@@ -224,7 +228,7 @@ static void mxc_serial_setbrg(void)
+ 	if (!gd->baudrate)
+ 		gd->baudrate = CONFIG_BAUDRATE;
+ 
+-	_mxc_serial_setbrg(mxc_base, clk, gd->baudrate, false);
++	_mxc_serial_setbrg(mxc_base, clk, gd->baudrate, CFG_MXC_UART_USE_DTE);
+ }
+ 
+ static int mxc_serial_getc(void)
+@@ -262,7 +266,7 @@ static int mxc_serial_tstc(void)
+  */
+ static int mxc_serial_init(void)
+ {
+-	_mxc_serial_init(mxc_base, false);
++	_mxc_serial_init(mxc_base, CFG_MXC_UART_USE_DTE);
+ 
+ 	serial_setbrg();
+ 
+diff --git a/include/configs/colibri_imx7.h b/include/configs/colibri_imx7.h
+index 33133a0b96e1..995e769212c5 100644
+--- a/include/configs/colibri_imx7.h
++++ b/include/configs/colibri_imx7.h
+@@ -13,6 +13,9 @@
+ 
+ #include "mx7_common.h"
+ 
++#define CFG_MXC_UART_BASE		UART1_IPS_BASE_ADDR
++#define CFG_MXC_UART_USE_DTE	true
++
+ /* MMC Config*/
+ #define CFG_SYS_FSL_ESDHC_ADDR	0
+ #ifdef CONFIG_TARGET_COLIBRI_IMX7_NAND
+-- 
+2.34.1
+
