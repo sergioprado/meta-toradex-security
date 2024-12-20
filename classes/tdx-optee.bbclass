@@ -46,6 +46,7 @@ addhandler validate_optee_support
 validate_optee_support[eventmask] = "bb.event.SanityCheck"
 python validate_optee_support() {
     supported_machines = [
+        'apalis-imx6',
         'colibri-imx6',
         'colibri-imx7-emmc',
         'verdin-imx8mp',

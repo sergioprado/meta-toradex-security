@@ -1,0 +1,108 @@
+From ace7fb60a3067b29bfef17e9cf662ca38a02dcd2 Mon Sep 17 00:00:00 2001
+From: Sergio Prado <sergio.prado@e-labworks.com>
+Date: Thu, 5 Dec 2024 09:56:10 -0300
+Subject: [PATCH] toradex: imx6q: add support to boot OP-TEE from SPL
+
+Upstream-Status: Pending
+
+Signed-off-by: Sergio Prado <sergio.prado@e-labworks.com>
+---
+ arch/arm/dts/imx6q-apalis-eval-u-boot.dtsi | 63 ++++++++++++++++++++++
+ arch/arm/mach-imx/mx6/Kconfig              |  1 +
+ 2 files changed, 64 insertions(+)
+
+diff --git a/arch/arm/dts/imx6q-apalis-eval-u-boot.dtsi b/arch/arm/dts/imx6q-apalis-eval-u-boot.dtsi
+index 103605ac930d..fcb0eeedb76b 100644
+--- a/arch/arm/dts/imx6q-apalis-eval-u-boot.dtsi
++++ b/arch/arm/dts/imx6q-apalis-eval-u-boot.dtsi
+@@ -4,6 +4,7 @@
+  */
+ 
+ #include "imx6qdl-u-boot.dtsi"
++#include <config.h>
+ 
+ / {
+ 	aliases {
+@@ -29,6 +30,68 @@
+ 		wdt = <&wdog1>;
+ 		bootph-pre-ram;
+ 	};
++
++#if defined(CONFIG_SPL_OPTEE_IMAGE)
++	reserved-memory {
++		#address-cells = <1>;
++		#size-cells = <1>;
++		ranges;
++
++		optee@1c000000 {
++			reg = <0x1c000000 0x01000000>;
++			no-map;
++		};
++	};
++
++	binman {
++		fit {
++			description = "FIT image with OP-TEE";
++			fit,fdt-list = "of-list";
++			#address-cells = <1>;
++			filename = "u-boot.itb";
++
++			images {
++				u-boot {
++					description = "U-Boot";
++					type = "standalone";
++					os = "U-Boot";
++					arch = "arm";
++					compression = "none";
++					load = <CONFIG_TEXT_BASE>;
++					entry = <CONFIG_TEXT_BASE>;
++					u-boot-nodtb {
++					};
++				};
++				op-tee {
++					description = "OP-TEE";
++					type = "tee";
++					arch = "arm";
++					os = "tee";
++					compression = "none";
++					load = <0x1c000000>;
++					entry = <0x1c000000>;
++					tee-os {
++					};
++				};
++				@fdt-SEQ {
++					description = "fdt-NAME";
++					compression = "none";
++					type = "flat_dt";
++					arch = "arm";
++				};
++			};
++			configurations {
++				default = "@config-DEFAULT-SEQ";
++				@config-SEQ {
++					description = "NAME.dtb";
++					fdt = "fdt-SEQ";
++					fit,firmware = "op-tee", "u-boot";
++					fit,loadables;
++				};
++			};
++		};
++	};
++#endif
+ };
+ 
+ &wdog1 {
+diff --git a/arch/arm/mach-imx/mx6/Kconfig b/arch/arm/mach-imx/mx6/Kconfig
+index 15ee2b933f69..97ee80b3149f 100644
+--- a/arch/arm/mach-imx/mx6/Kconfig
++++ b/arch/arm/mach-imx/mx6/Kconfig
+@@ -118,6 +118,7 @@ config TARGET_APALIS_IMX6
+ 	select DM_SERIAL
+ 	select DM_THERMAL
+ 	select SUPPORT_SPL
++	select BINMAN if SPL_OPTEE_IMAGE
+ 	imply CMD_DM
+ 	imply CMD_SATA
+ 
+-- 
+2.34.1

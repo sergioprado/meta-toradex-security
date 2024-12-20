@@ -14,6 +14,11 @@ SRC_URI:append:colibri-imx6 = "\
     file://optee-colibri-imx6.cfg \
 "
 
+SRC_URI:append:apalis-imx6 = "\
+    file://0001-toradex-imx6q-add-support-to-boot-OP-TEE-from-SPL.patch \
+    file://optee-apalis-imx6.cfg \
+"
+
 SRC_URI:append:colibri-imx7-emmc = "\
     file://0001-board-colibri_imx7-add-SPL-support.patch \
     file://0001-toradex-imx7d-add-support-to-boot-OP-TEE-from-SPL.patch \
@@ -22,6 +27,7 @@ SRC_URI:append:colibri-imx7-emmc = "\
 
 EXTRA_OEMAKE:append:colibri-imx6 = " TEE=tee.bin"
 EXTRA_OEMAKE:append:colibri-imx7-emmc = " TEE=tee.bin"
+EXTRA_OEMAKE:append:apalis-imx6 = " TEE=tee.bin"
 
 copy_optee_binary_to_uboot() {
     if [ -n "${UBOOT_CONFIG}" ]; then
@@ -46,6 +52,9 @@ do_prepare_uboot_for_optee() {
     bbnote "Nothing to be done for machine ${MACHINE}"
 }
 do_prepare_uboot_for_optee:colibri-imx6() {
+    copy_optee_binary_to_uboot
+}
+do_prepare_uboot_for_optee:apalis-imx6() {
     copy_optee_binary_to_uboot
 }
 do_prepare_uboot_for_optee:colibri-imx7-emmc() {
