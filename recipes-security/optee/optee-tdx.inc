@@ -1,3 +1,5 @@
+FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+
 COMPATIBLE_MACHINE = "${MACHINE}"
 
 # include machine specific configuration
@@ -27,6 +29,13 @@ EXTRA_OEMAKE:append:pn-optee-os = "\
     ${@oe.utils.conditional('TDX_ENC_KEY_BACKEND', 'tee', '${OPTEE_OS_ENCRYPTION_OPTS}', '', d)} \
     CFG_UART_BASE=${UART_BASE_ADDR} \
     ${OPTEE_OS_EXTRA_MACHINE_ARGS} \
+"
+
+# Secure the TZASC background region 0 on i.MX 8M to prevent the normal world
+# from reaching secure memory through DDR address aliases. Drop once the BSP
+# moves to OP-TEE >= 4.10.0.
+SRC_URI:append:pn-optee-os:mx8m-generic-bsp = "\
+    file://0001-plat-imx-tzc380-secure-TZASC-background-region-0.patch \
 "
 
 require ${@oe.utils.conditional('TDX_OPTEE_FS_RPMB', '1', 'optee-fs-rpmb.inc', '', d)}

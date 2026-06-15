@@ -165,6 +165,24 @@ Using slot 0 with a present token (0x0)
 
 For additional details on how the PKCS#11 Trusted Application works, refer to the [OP-TEE official documentation](https://optee.readthedocs.io/en/latest/building/userland_integration.html#pkcs-11-driver).
 
+## Secure world memory protection on i.MX 8M
+
+On i.MX 8M SoCs, OP-TEE protects its secure memory using the TrustZone Address Space Controller (TZASC), which restricts the memory regions that the normal world (Linux) is allowed to access. However, the i.MX 8M DDR controller ignores the upper bits of the memory address, so the same physical memory can be reached through more than one address (an "alias"). Secure memory that is correctly blocked at its primary address can therefore still be reached through one of these aliases if the TZASC background region (region 0) is left open to the normal world.
+
+By default, the boot firmware (U-Boot SPL and TF-A) configures region 0 to allow non-secure access, and the OP-TEE version shipped in the BSP does not restrict it. As a result, a compromised Linux kernel could read OP-TEE secure memory (for example cryptographic keys or fTPM state) through these aliases, bypassing the TrustZone isolation. This issue is described in detail in the [sigma-star "TrustZone Intermezzo" article](https://sigma-star.at/blog/2026/06/trustzone-intermezzo/).
+
+To close this gap, this layer applies a patch to OP-TEE that locks the TZASC background region 0 down to secure-only access on i.MX 8M. Because OP-TEE is the last boot stage to program the TZASC, this override takes effect regardless of how U-Boot or TF-A configured region 0. The protection is enabled by default and requires no configuration. It is applied automatically when OP-TEE is enabled (`tdx-optee`) on i.MX 8M modules.
+
+Securing region 0 means that any DMA-capable peripheral that relies on accessing memory through the background region is denied access. In practice, legitimate normal-world memory is covered by a dedicated TZASC region and remains accessible, so peripherals should continue to work normally. We test the common peripherals (such as USB, GPU, VPU and display) after applying this change.
+
+That said, if you use a custom carrier board, or enable peripherals or DMA usage patterns that are not part of our test coverage, it is possible that some hardware functionality may not work as expected. If you observe a regression in hardware functionality after enabling OP-TEE, you can disable this protection by adding the following line to an OE configuration file (e.g. `local.conf`):
+
+```
+EXTRA_OEMAKE:append:pn-optee-os = " CFG_TZASC_REGION0_SECURE=n"
+```
+
+Be aware that disabling this protection re-opens the memory isolation bypass described above, allowing a compromised normal world to access OP-TEE secure memory.
+
 ## Limitations
 
 Currently, OP-TEE cannot be used in conjunction with HAB on Colibri iMX6 due to a limitation in the signing process. A different U-Boot image is generated when OP-TEE is enabled, and the signing scripts need to be adapted to handle it.

@@ -1,0 +1,69 @@
+From: Sergio Prado <sergio.prado@e-labworks.com>
+Date: Mon, 15 Jun 2026 00:00:00 +0000
+Subject: [PATCH] plat-imx: tzc380: secure the TZASC background region 0
+
+On i.MX 8M the DDR controller ignores the upper address bits, so the
+secure DRAM is also reachable through address aliases (e.g. 0x1be000000
+aliases 0xbe000000). Those aliases are not covered by the TZASC regions
+configured by OP-TEE (DRAM, TZDRAM, shared memory) and therefore fall
+through to the background region 0.
+
+Earlier boot stages leave region 0 wide open to the normal world:
+U-Boot SPL (enable_tzc380() writes 0xf0000000 to REGION_ATTRIBUTES_0)
+and TF-A BL31 (bl31_tzc380_setup() programs region 0 with TZC_ATTR_SP_ALL).
+OP-TEE only configures regions 1-3 and never touches region 0, so the
+permissive setting survives. A compromised normal world can then read
+secure memory through the aliases, bypassing TrustZone isolation.
+
+OP-TEE is the last boot stage to program the TZASC and the only one that
+locks it down (tzc_regions_lockdown()), and neither U-Boot nor TF-A lock
+the per-region registers. Lock region 0 down to secure-only access right
+before the lockdown to close the bypass regardless of what the earlier
+stages left behind.
+
+This backports the behaviour of upstream CFG_TZASC_REGION0_SECURE
+(OP-TEE >= 4.10.0) into the NXP downstream OP-TEE used on i.MX 8M.
+
+Reference: https://sigma-star.at/blog/2026/06/trustzone-intermezzo/
+
+Upstream-Status: Backport [https://github.com/OP-TEE/optee_os/commit/443c5817de47f1bd19091b419806898070382a67]
+Signed-off-by: Sergio Prado <sergio.prado@e-labworks.com>
+---
+diff --git a/core/arch/arm/plat-imx/conf.mk b/core/arch/arm/plat-imx/conf.mk
+index d1fc2882e598..ff4e143e3182 100644
+--- a/core/arch/arm/plat-imx/conf.mk
++++ b/core/arch/arm/plat-imx/conf.mk
+@@ -617,6 +617,10 @@ CFG_PKCS11_TA ?= y
+ CFG_CORE_HUK_SUBKEY_COMPAT_USE_OTP_DIE_ID ?= y
+ CFG_TZC380 ?= y
+ 
++# Lock down the TZASC background region 0 to secure-only access (backport of
++# upstream CFG_TZASC_REGION0_SECURE, OP-TEE >= 4.10.0). See tzc380.c.
++CFG_TZASC_REGION0_SECURE ?= y
++
+ # Almost all platforms include CAAM HW Modules, except the
+ # ones forced to be disabled
+ CFG_NXP_CAAM ?= y
+diff --git a/core/arch/arm/plat-imx/tzc380.c b/core/arch/arm/plat-imx/tzc380.c
+index ecc545be6948..178d57d9ab00 100644
+--- a/core/arch/arm/plat-imx/tzc380.c
++++ b/core/arch/arm/plat-imx/tzc380.c
+@@ -75,6 +75,18 @@ static TEE_Result imx_configure_tzasc(void)
+ 		region = imx_tzc_auto_configure(CFG_SHMEM_START, CFG_SHMEM_SIZE,
+ 						TZC_ATTR_SP_ALL, region);
+ 
++		/*
++		 * The i.MX DDR controller ignores the upper address bits, so
++		 * secure DRAM is also reachable through address aliases that are
++		 * not covered by the regions configured above and therefore fall
++		 * through to the background region 0. If earlier boot stages
++		 * (U-Boot SPL, TF-A) left region 0 open to the normal world, the
++		 * normal world can read secure memory via those aliases. Lock
++		 * region 0 down to secure-only access here to close that bypass.
++		 */
++		if (IS_ENABLED(CFG_TZASC_REGION0_SECURE))
++			tzc_configure_region(0, 0, TZC_ATTR_SP_S_RW);
++
+ 		if (tzc_regions_lockdown() != TEE_SUCCESS)
+ 			panic("Region lockdown failed!");
+ 
