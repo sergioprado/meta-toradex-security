@@ -8,6 +8,8 @@ SRC_URI = "\
     file://tdx-enc \
     file://tdx-enc-handler.service \
     file://99-tpm.rules \
+    file://tdx-fsenc.sh \
+    file://tdx-fsenc-handler.service \
 "
 
 RDEPENDS:${PN} = "\
@@ -22,14 +24,27 @@ RDEPENDS_TPM = "\
     tpm2-tools \
 "
 
-RDEPENDS:${PN}:append = "${@ '${RDEPENDS_TPM}' if d.getVar('TDX_ENC_KEY_BACKEND') == 'tpm' else ''}"
+RDEPENDS:${PN}:append = "${@ ' ${RDEPENDS_TPM}' if d.getVar('TDX_ENC_KEY_BACKEND') == 'tpm' or d.getVar('TDX_FSENC_KEY_BACKEND') == 'tpm' else ''}"
+
+# filesystem encryption needs fscryptctl to manage keys and policies, tune2fs to
+# enable the ext4 encryption feature and losetup for the key derivation
+RDEPENDS_FSENC = "\
+    fscryptctl \
+    e2fsprogs-tune2fs \
+    util-linux-losetup \
+"
+
+RDEPENDS:${PN}:append:tdx-fsenc = " ${RDEPENDS_FSENC}"
 
 inherit update-rc.d systemd
 
 INITSCRIPT_NAME = "tdx-enc"
 INITSCRIPT_PARAMS = "start 30 1 2 3 4 5 . stop 80 0 6 ."
 
-SYSTEMD_SERVICE:${PN} = "tdx-enc-handler.service"
+# only enable the services of the encryption features actually in use
+SYSTEMD_SERVICE:${PN} = ""
+SYSTEMD_SERVICE:${PN}:append:tdx-encrypted = " tdx-enc-handler.service"
+SYSTEMD_SERVICE:${PN}:append:tdx-fsenc = " tdx-fsenc-handler.service"
 
 do_install() {
     install -d ${D}${sbindir}
@@ -52,12 +67,12 @@ do_install() {
     install -m 0644 ${WORKDIR}/tdx-enc-handler.service ${D}${systemd_system_unitdir}
 
     # setup systemd service dependencies
-    if [ ${TDX_ENC_KEY_BACKEND} = "tpm" ]; then
+    if [ "${TDX_ENC_KEY_BACKEND}" = "tpm" ]; then
         dep_bef="Before=local-fs.target"
         dep_aft="After=systemd-remount-fs.service dev-tpm0.device"
         dep_req="Requires=dev-tpm0.device"
         dep_all="${dep_bef}\n${dep_aft}\n${dep_req}"
-    elif [ ${TDX_ENC_KEY_BACKEND} = "tee" ]; then
+    elif [ "${TDX_ENC_KEY_BACKEND}" = "tee" ]; then
         dep_aft="After=tee-supplicant@teepriv0.service"
         dep_req="Requires=tee-supplicant@teepriv0.service"
         dep_all="${dep_aft}\n${dep_req}"
@@ -71,7 +86,48 @@ do_install() {
     install -d ${D}${sysconfdir}/init.d
     install -m 755 ${WORKDIR}/tdx-enc ${D}${sysconfdir}/init.d/tdx-enc
 
-    if [ ${TDX_ENC_KEY_BACKEND} = "tpm" ]; then
+    if [ "${TDX_ENC_KEY_BACKEND}" = "tpm" ]; then
+        mkdir -p ${D}${sysconfdir}/udev/rules.d/
+        install -m 0644 ${WORKDIR}/99-tpm.rules ${D}${sysconfdir}/udev/rules.d/99-tpm.rules
+    fi
+}
+
+# filesystem encryption handler, installed only when the feature is enabled
+do_install:append:tdx-fsenc() {
+    install -d ${D}${sbindir}
+    install -m 0755 ${WORKDIR}/tdx-fsenc.sh ${D}${sbindir}/tdx-fsenc.sh
+
+    sed -i 's|@@TDX_FSENC_KEY_BACKEND@@|${TDX_FSENC_KEY_BACKEND}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_CIPHER@@|${TDX_FSENC_CIPHER}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_KEY_DIR@@|${TDX_FSENC_KEY_DIR}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_KEY_FILE@@|${TDX_FSENC_KEY_FILE}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_STORAGE_LOCATION@@|${TDX_FSENC_STORAGE_LOCATION}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_STORAGE_MOUNTPOINT@@|${TDX_FSENC_STORAGE_MOUNTPOINT}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_STORAGE_MOUNT_ARGS@@|${TDX_FSENC_STORAGE_MOUNT_ARGS}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_DIRS@@|${TDX_FSENC_DIRS}|g' ${D}${sbindir}/tdx-fsenc.sh
+    sed -i 's|@@TDX_FSENC_POLICY_ARGS@@|${TDX_FSENC_POLICY_ARGS}|g' ${D}${sbindir}/tdx-fsenc.sh
+
+    install -d ${D}${systemd_system_unitdir}
+    install -m 0644 ${WORKDIR}/tdx-fsenc-handler.service ${D}${systemd_system_unitdir}
+
+    # setup systemd service dependencies
+    if [ "${TDX_FSENC_KEY_BACKEND}" = "tpm" ]; then
+        dep_bef="Before=local-fs.target"
+        dep_aft="After=systemd-remount-fs.service dev-tpm0.device"
+        dep_req="Requires=dev-tpm0.device"
+        dep_all="${dep_bef}\n${dep_aft}\n${dep_req}"
+    elif [ "${TDX_FSENC_KEY_BACKEND}" = "tee" ]; then
+        dep_aft="After=tee-supplicant@teepriv0.service"
+        dep_req="Requires=tee-supplicant@teepriv0.service"
+        dep_all="${dep_aft}\n${dep_req}"
+    else
+        dep_bef="Before=local-fs.target"
+        dep_aft="After=systemd-remount-fs.service"
+        dep_all="${dep_bef}\n${dep_aft}"
+    fi
+    sed -i "/^@@DEPENDENCIES@@/c${dep_all}" ${D}${systemd_system_unitdir}/tdx-fsenc-handler.service
+
+    if [ "${TDX_FSENC_KEY_BACKEND}" = "tpm" ]; then
         mkdir -p ${D}${sysconfdir}/udev/rules.d/
         install -m 0644 ${WORKDIR}/99-tpm.rules ${D}${sysconfdir}/udev/rules.d/99-tpm.rules
     fi

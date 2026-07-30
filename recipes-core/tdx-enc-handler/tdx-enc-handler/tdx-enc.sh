@@ -134,54 +134,6 @@ tdx_enc_prepare_generic() {
     fi
 }
 
-# CLEARTEXT: prepare system
-tdx_enc_prepare_cleartext() {
-    tdx_enc_log "Preparing and checking system (cleartext)..."
-}
-
-# CAAM: prepare system
-tdx_enc_prepare_caam() {
-    tdx_enc_log "Preparing and checking system (caam)..."
-
-    if ! modprobe trusted source=caam; then
-        tdx_enc_exit_error "Error loading trusted module!"
-    fi
-}
-
-# TPM: prepare system
-tdx_enc_prepare_tpm() {
-    tdx_enc_log "Preparing and checking system (tpm)..."
-
-    if ! modprobe trusted source=tpm; then
-        tdx_enc_exit_error "Error loading trusted module!"
-    fi
-
-    if [ ! -c /dev/tpm0 ]; then
-        tdx_enc_exit_error "TPM device node (/dev/tpm0) not found!"
-    fi
-
-    if ! echo "deadbeef" | tpm2_hash >/dev/null; then
-        tdx_enc_exit_error "Hash calculation via tpm2_hash failed. TPM device might not be functional!"
-    fi
-}
-
-# TEE: prepare system
-tdx_enc_prepare_tee() {
-    tdx_enc_log "Preparing and checking system (tee)..."
-
-    if [ ! -c /dev/tee0 ]; then
-        tdx_enc_exit_error "TEE device node not found!"
-    fi
-
-    if ! pgrep "tee-supplicant" > /dev/null; then
-        tdx_enc_exit_error "TEE supplicant daemon not running!"
-    fi
-
-    if ! modprobe trusted source=tee; then
-        tdx_enc_exit_error "Error loading trusted module!"
-    fi
-}
-
 tdx_enc_key_recover_from_partition() {
     tdx_enc_log "Recovering encrypted key blob from partition ${TDX_ENC_STORAGE_LOCATION}..."
 
@@ -476,7 +428,7 @@ tdx_enc_main_start() {
         tdx_enc_pre_unmount
     fi
     tdx_enc_prepare_generic
-    tdx_enc_prepare_${TDX_ENC_KEY_BACKEND}
+    tdx_enc_key_prepare_${TDX_ENC_KEY_BACKEND}
     tdx_enc_key_gen_${TDX_ENC_KEY_BACKEND}
     tdx_enc_partition_setup
     tdx_enc_partition_mount

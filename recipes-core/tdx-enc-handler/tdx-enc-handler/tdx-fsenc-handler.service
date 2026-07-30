@@ -1,0 +1,14 @@
+[Unit]
+Description=Filesystem encryption handler for Toradex modules
+DefaultDependencies=no
+@@DEPENDENCIES@@
+RequiresMountsFor=/tmp /var
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/tdx-fsenc.sh start
+ExecStop=/usr/sbin/tdx-fsenc.sh stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=local-fs.target
