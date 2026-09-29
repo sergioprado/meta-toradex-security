@@ -56,8 +56,8 @@ fuse_write_line() {
     echo "fuse prog -y $bank $word $hexval"
 }
 
-# Emit a fuse-prog line for an SJC template entry, with a leading comment.
-# $1 = symbol name (looked up in SJC_TEMPLATE)
+# Emit a fuse-prog line for a Secure Debug entry, with a leading comment.
+# $1 = symbol name (looked up in SECURE_DEBUG_TEMPLATE)
 # $2 = human-readable comment
 # $3 = optional hex value; if omitted, the template's mask is used.
 secure_debug_emit() {
@@ -65,9 +65,9 @@ secure_debug_emit() {
     local comment="$2"
     local fuseval="${3:-}"
 
-    local entry="${SJC_TEMPLATE[$name]}"
+    local entry="${SECURE_DEBUG_TEMPLATE[$name]}"
     if [ -z "$entry" ]; then
-        echo "Error: SJC template entry '$name' not found!" >&2
+        echo "Error: ${SECURE_DEBUG_PREFIX} template entry '$name' not found!" >&2
         return 1
     fi
 
@@ -75,7 +75,7 @@ secure_debug_emit() {
     read -r bank word mask <<<"$entry"
     local hexval="${fuseval:-$mask}"
     if [ -z "$hexval" ]; then
-        echo "Error: no value for SJC template entry '$name'!" >&2
+        echo "Error: no value for ${SECURE_DEBUG_PREFIX} template entry '$name'!" >&2
         return 1
     fi
     {
@@ -85,21 +85,30 @@ secure_debug_emit() {
 
     # Record the resolved value in the human-readable fuse map too, so that
     # it documents every fuse that gets burned and not just the HAB ones.
-    echo "SJC:${name}:${bank}:${word}:${hexval}" >> "$FUSE_INFO_FILE"
+    echo "${SECURE_DEBUG_PREFIX}:${name}:${bank}:${word}:${hexval}" >> "$FUSE_INFO_FILE"
 }
 
+# Load the Secure Debug template file $1. Its "H:T:<type>" header selects the
+# prefix of the rows to load (e.g. SJC). Rows are kept in SECURE_DEBUG_TEMPLATE
+# by name.
 secure_debug_load_template() {
     local template_file="$1"
     if [ ! -e "$template_file" ]; then
-        echo "Error: SJC template file not found [$template_file]!" >&2
+        echo "Error: Secure Debug template file not found [$template_file]!" >&2
         return 1
     fi
 
-    declare -gA SJC_TEMPLATE
+    SECURE_DEBUG_PREFIX=$(sed -n 's/^H:T:\(.*\)$/\1/p' "$template_file")
+    if [ -z "$SECURE_DEBUG_PREFIX" ]; then
+        echo "Error: no H:T header in Secure Debug template [$template_file]!" >&2
+        return 1
+    fi
+
+    declare -gA SECURE_DEBUG_TEMPLATE
     local prefix name bank word mask
     while IFS=: read -r prefix name bank word mask; do
-        [ "$prefix" = "SJC" ] || continue
-        SJC_TEMPLATE[$name]="$bank $word $mask"
+        [ "$prefix" = "$SECURE_DEBUG_PREFIX" ] || continue
+        SECURE_DEBUG_TEMPLATE[$name]="$bank $word $mask"
     done < "$template_file"
 }
 
