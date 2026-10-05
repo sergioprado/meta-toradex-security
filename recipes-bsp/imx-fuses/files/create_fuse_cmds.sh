@@ -148,16 +148,26 @@ secure_debug_append() {
 
     secure_debug_load_template "${TEMPLATES_DIR}/${TDX_SECURE_DEBUG_FUSE_TEMPLATE}"
 
+    if [ "$SECURE_DEBUG_PREFIX" = "SJC" ]; then
+        secure_debug_append_sjc
+    else
+        echo "Error: Secure Debug Prefix ${SECURE_DEBUG_PREFIX} is not supported!" >&2
+        return 1
+    fi
+}
+
+# Emit the Secure Debug section for SoCs with a System JTAG Controller (SJC).
+secure_debug_append_sjc() {
     echo "" >> "$FUSE_CMDS_FILE"
     echo "${SECTION_SECURE_DEBUG}" >> "$FUSE_CMDS_FILE"
     echo "${WARNING_SECURE_DEBUG}" >> "$FUSE_CMDS_FILE"
 
     case "${SOC}" in
         "iMX8QM"|"iMX8QX")
-            secure_debug_append_imx8
+            secure_debug_append_sjc_imx8
             ;;
         *)
-            secure_debug_append_imx6_imx7_imx8m
+            secure_debug_append_sjc_imx6_imx7_imx8m
             ;;
     esac
 }
@@ -165,7 +175,7 @@ secure_debug_append() {
 # i.MX8 and i.MX8X: no JTAG_SMODE; on an OEM Closed device the challenge/
 # response opens debug, with separate 128-bit keys for the normal world (OEM
 # key) and the secure world (TrustZone key).
-secure_debug_append_imx8() {
+secure_debug_append_sjc_imx8() {
     if [ "${TDX_SECURE_DEBUG_SJC_DISABLE}" = "1" ]; then
         secure_debug_emit SJC_DISABLE "SJC_DISABLE = 1 (full JTAG disable)"
         return
@@ -197,7 +207,7 @@ secure_debug_append_imx8() {
 
 # i.MX6, i.MX7 and i.MX8M: JTAG_SMODE selects the debug policy, with a single
 # 56-bit response key.
-secure_debug_append_imx6_imx7_imx8m() {
+secure_debug_append_sjc_imx6_imx7_imx8m() {
     if [ "${TDX_SECURE_DEBUG_SJC_DISABLE}" = "1" ]; then
         secure_debug_emit SJC_DISABLE "SJC_DISABLE = 1 (full JTAG disable)"
     else
